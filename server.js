@@ -3,7 +3,8 @@ const Database = require('better-sqlite3');
 const path = require('path');
 
 const app = express();
-const db = new Database(path.join(__dirname, 'inventario.db'));
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'inventario.db');
+const db = new Database(dbPath);
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS products (
