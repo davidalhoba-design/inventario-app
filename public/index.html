@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventario - Gestión de Negocio</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>📦 Gestión de Inventario</h1>
+  <nav>
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="productos">Productos</button>
+    <button class="tab-btn" data-tab="ingreso">Ingreso de Mercancía</button>
+    <button class="tab-btn" data-tab="salida">Salida de Mercancía</button>
+    <button class="tab-btn" data-tab="buscar">Buscar Producto</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- DASHBOARD -->
+  <section id="dashboard" class="tab-content active">
+    <div class="cards">
+      <div class="card"><h3>Productos registrados</h3><p id="d-total-prod">0</p></div>
+      <div class="card"><h3>Valor inventario (costo)</h3><p id="d-valor-costo">$0</p></div>
+      <div class="card"><h3>Valor inventario (venta)</h3><p id="d-valor-venta">$0</p></div>
+      <div class="card"><h3>Ventas hoy</h3><p id="d-ventas-hoy">$0</p></div>
+      <div class="card"><h3>Ganancia hoy</h3><p id="d-ganancia-hoy">$0</p></div>
+      <div class="card"><h3>Ganancia total</h3><p id="d-ganancia-total">$0</p></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h2>⚠️ Alertas de Stock Bajo / Agotado</h2>
+        <table>
+          <thead><tr><th>Código</th><th>Item</th><th>Stock</th><th>Mínimo</th><th>Ubicación</th></tr></thead>
+          <tbody id="d-low-stock"></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>🏆 Productos más vendidos</h2>
+        <table>
+          <thead><tr><th>Código</th><th>Item</th><th>Cant. vendida</th></tr></thead>
+          <tbody id="d-top-vendidos"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRODUCTOS -->
+  <section id="productos" class="tab-content">
+    <div class="panel">
+      <h2>➕ Agregar Nuevo Producto</h2>
+      <form id="form-producto" class="form-grid">
+        <label>Código <input type="text" name="codigo" required></label>
+        <label>Item <input type="text" name="item" required></label>
+        <label>Proveedor <input type="text" name="proveedor"></label>
+        <label>Precio de llegada <input type="number" step="0.01" name="precio_compra" required></label>
+        <label>Precio de venta <input type="number" step="0.01" name="precio_venta" required></label>
+        <label>IVA (%) <input type="number" step="0.01" name="iva" value="0"></label>
+        <label>Stock inicial <input type="number" name="stock" value="0"></label>
+        <label>Stock mínimo (alerta) <input type="number" name="stock_minimo" value="5"></label>
+        <label>Ubicación
+          <select name="ubicacion">
+            <option value="bodega">Bodega</option>
+            <option value="exhibicion">Exhibición</option>
+          </select>
+        </label>
+        <button type="submit">Guardar Producto</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>📋 Listado de Productos</h2>
+      <table>
+        <thead><tr><th>Código</th><th>Item</th><th>Proveedor</th><th>P. Llegada</th><th>P. Venta</th><th>IVA</th><th>Stock</th><th>Mín.</th><th>Ubicación</th><th></th></tr></thead>
+        <tbody id="lista-productos"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- INGRESO -->
+  <section id="ingreso" class="tab-content">
+    <div class="panel">
+      <h2>📥 Registrar Ingreso de Mercancía</h2>
+      <form id="form-ingreso" class="form-grid">
+        <label>Fecha <input type="date" name="fecha" required></label>
+        <label>Proveedor <input type="text" name="proveedor" required></label>
+        <label>N° Factura <input type="text" name="factura" required></label>
+        <label>Código <input type="text" name="codigo" required></label>
+        <label>Item <input type="text" name="item" required></label>
+        <label>Cantidad <input type="number" name="cantidad" required min="1"></label>
+        <label>Precio de llegada <input type="number" step="0.01" name="precio_llegada" required></label>
+        <label>Precio de venta <input type="number" step="0.01" name="precio_venta" required></label>
+        <label>IVA (%) <input type="number" step="0.01" name="iva" value="0"></label>
+        <label>Ubicación (si es producto nuevo)
+          <select name="ubicacion">
+            <option value="bodega">Bodega</option>
+            <option value="exhibicion">Exhibición</option>
+          </select>
+        </label>
+        <button type="submit">Registrar Ingreso</button>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Historial de Ingresos</h2>
+      <table>
+        <thead><tr><th>Fecha</th><th>Proveedor</th><th>Factura</th><th>Código</th><th>Item</th><th>Cant.</th><th>P. Llegada</th><th>P. Venta</th><th>IVA</th></tr></thead>
+        <tbody id="lista-ingresos"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- SALIDA -->
+  <section id="salida" class="tab-content">
+    <div class="panel">
+      <h2>📤 Registrar Salida de Mercancía (Venta)</h2>
+      <form id="form-salida" class="form-grid">
+        <label>Fecha <input type="date" name="fecha" required></label>
+        <label>Código <input type="text" name="codigo" required></label>
+        <label>Cantidad <input type="number" name="cantidad" required min="1"></label>
+        <button type="submit">Registrar Venta</button>
+      </form>
+      <p id="salida-msg"></p>
+    </div>
+    <div class="panel">
+      <h2>Historial de Ventas</h2>
+      <table>
+        <thead><tr><th>Fecha</th><th>Código</th><th>Item</th><th>Cant.</th><th>P. Venta</th><th>Ganancia</th></tr></thead>
+        <tbody id="lista-salidas"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- BUSCAR -->
+  <section id="buscar" class="tab-content">
+    <div class="panel">
+      <h2>🔍 Buscar Producto</h2>
+      <input type="text" id="buscar-input" placeholder="Buscar por código o nombre...">
+      <table>
+        <thead><tr><th>Código</th><th>Item</th><th>Stock</th><th>Ubicación</th><th>P. Venta</th><th>Estado</th></tr></thead>
+        <tbody id="resultado-busqueda"></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
