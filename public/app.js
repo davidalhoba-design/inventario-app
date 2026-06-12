@@ -151,3 +151,7 @@ document.getElementById('buscar-input').addEventListener('input', e => loadBusqu
 
 // Inicial
 loadDashboard();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
