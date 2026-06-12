@@ -1,6 +1,7 @@
 const express = require('express');
 const Database = require('better-sqlite3');
 const path = require('path');
+const XLSX = require('xlsx');
 
 const app = express();
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'inventario.db');
@@ -165,6 +166,24 @@ app.get('/api/dashboard', (req, res) => {
     ventasTotales,
     topVendidos
   });
+});
+
+// ---- Exportar a Excel ----
+app.get('/api/export', (req, res) => {
+  const products = db.prepare('SELECT codigo, item, proveedor, precio_compra, precio_venta, iva, stock, stock_minimo, ubicacion FROM products ORDER BY item').all();
+  const entries = db.prepare('SELECT fecha, proveedor, factura, codigo, item, cantidad, precio_llegada, precio_venta, iva FROM entries ORDER BY fecha DESC, id DESC').all();
+  const sales = db.prepare('SELECT fecha, codigo, item, cantidad, precio_venta, precio_compra, ganancia FROM sales ORDER BY fecha DESC, id DESC').all();
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(products), 'Inventario');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entries), 'Ingresos');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sales), 'Salidas');
+
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const fecha = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Disposition', `attachment; filename="inventario_${fecha}.xlsx"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buffer);
 });
 
 const PORT = process.env.PORT || 3000;
