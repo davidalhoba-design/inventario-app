@@ -1,184 +1,215 @@
 const express = require('express');
-const Database = require('better-sqlite3');
-const path = require('path');
+const { Pool } = require('pg');
 const XLSX = require('xlsx');
+const path = require('path');
 
 const app = express();
-const dbPath = process.env.DB_PATH || path.join(__dirname, 'inventario.db');
-const db = new Database(dbPath);
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS products (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  codigo TEXT UNIQUE NOT NULL,
-  item TEXT NOT NULL,
-  proveedor TEXT,
-  precio_compra REAL DEFAULT 0,
-  precio_venta REAL DEFAULT 0,
-  iva REAL DEFAULT 0,
-  stock INTEGER DEFAULT 0,
-  stock_minimo INTEGER DEFAULT 5,
-  ubicacion TEXT DEFAULT 'bodega'
-);
-
-CREATE TABLE IF NOT EXISTS entries (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  fecha TEXT NOT NULL,
-  proveedor TEXT,
-  factura TEXT,
-  codigo TEXT NOT NULL,
-  item TEXT NOT NULL,
-  cantidad INTEGER NOT NULL,
-  precio_llegada REAL NOT NULL,
-  precio_venta REAL NOT NULL,
-  iva REAL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS sales (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  fecha TEXT NOT NULL,
-  codigo TEXT NOT NULL,
-  item TEXT NOT NULL,
-  cantidad INTEGER NOT NULL,
-  precio_venta REAL NOT NULL,
-  precio_compra REAL NOT NULL,
-  ganancia REAL NOT NULL
-);
-`);
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS products (
+      id SERIAL PRIMARY KEY,
+      codigo TEXT UNIQUE NOT NULL,
+      item TEXT NOT NULL,
+      proveedor TEXT DEFAULT '',
+      precio_compra NUMERIC DEFAULT 0,
+      precio_venta NUMERIC DEFAULT 0,
+      iva NUMERIC DEFAULT 0,
+      stock INTEGER DEFAULT 0,
+      stock_minimo INTEGER DEFAULT 5,
+      ubicacion TEXT DEFAULT 'bodega'
+    );
+    CREATE TABLE IF NOT EXISTS entries (
+      id SERIAL PRIMARY KEY,
+      fecha TEXT NOT NULL,
+      proveedor TEXT DEFAULT '',
+      factura TEXT DEFAULT '',
+      codigo TEXT NOT NULL,
+      item TEXT NOT NULL,
+      cantidad INTEGER NOT NULL,
+      precio_llegada NUMERIC NOT NULL,
+      precio_venta NUMERIC NOT NULL,
+      iva NUMERIC DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS sales (
+      id SERIAL PRIMARY KEY,
+      fecha TEXT NOT NULL,
+      codigo TEXT NOT NULL,
+      item TEXT NOT NULL,
+      cantidad INTEGER NOT NULL,
+      precio_venta NUMERIC NOT NULL,
+      precio_compra NUMERIC NOT NULL,
+      ganancia NUMERIC NOT NULL
+    );
+  `);
+}
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---- Products ----
-app.get('/api/products', (req, res) => {
+app.get('/api/products', async (req, res) => {
   const q = req.query.q;
-  let rows;
+  let result;
   if (q) {
-    rows = db.prepare(`SELECT * FROM products WHERE codigo LIKE ? OR item LIKE ? ORDER BY item`)
-      .all(`%${q}%`, `%${q}%`);
+    result = await pool.query(
+      `SELECT * FROM products WHERE codigo ILIKE $1 OR item ILIKE $1 ORDER BY item`,
+      [`%${q}%`]
+    );
   } else {
-    rows = db.prepare('SELECT * FROM products ORDER BY item').all();
+    result = await pool.query('SELECT * FROM products ORDER BY item');
   }
-  res.json(rows);
+  res.json(result.rows);
 });
 
-app.post('/api/products', (req, res) => {
+app.post('/api/products', async (req, res) => {
   const { codigo, item, proveedor, precio_compra, precio_venta, iva, stock, stock_minimo, ubicacion } = req.body;
   if (!codigo || !item) return res.status(400).json({ error: 'codigo e item son requeridos' });
   try {
-    db.prepare(`INSERT INTO products (codigo, item, proveedor, precio_compra, precio_venta, iva, stock, stock_minimo, ubicacion)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(codigo, item, proveedor || '', precio_compra || 0, precio_venta || 0, iva || 0, stock || 0, stock_minimo || 5, ubicacion || 'bodega');
+    await pool.query(
+      `INSERT INTO products (codigo, item, proveedor, precio_compra, precio_venta, iva, stock, stock_minimo, ubicacion)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [codigo, item, proveedor || '', precio_compra || 0, precio_venta || 0, iva || 0, stock || 0, stock_minimo || 5, ubicacion || 'bodega']
+    );
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-app.put('/api/products/:codigo', (req, res) => {
+app.put('/api/products/:codigo', async (req, res) => {
   const { item, proveedor, precio_compra, precio_venta, iva, stock, stock_minimo, ubicacion } = req.body;
-  db.prepare(`UPDATE products SET item=?, proveedor=?, precio_compra=?, precio_venta=?, iva=?, stock=?, stock_minimo=?, ubicacion=? WHERE codigo=?`)
-    .run(item, proveedor, precio_compra, precio_venta, iva, stock, stock_minimo, ubicacion, req.params.codigo);
+  await pool.query(
+    `UPDATE products SET item=$1, proveedor=$2, precio_compra=$3, precio_venta=$4, iva=$5, stock=$6, stock_minimo=$7, ubicacion=$8 WHERE codigo=$9`,
+    [item, proveedor, precio_compra, precio_venta, iva, stock, stock_minimo, ubicacion, req.params.codigo]
+  );
   res.json({ ok: true });
 });
 
-app.delete('/api/products/:codigo', (req, res) => {
-  db.prepare('DELETE FROM products WHERE codigo=?').run(req.params.codigo);
+app.delete('/api/products/:codigo', async (req, res) => {
+  await pool.query('DELETE FROM products WHERE codigo=$1', [req.params.codigo]);
   res.json({ ok: true });
 });
 
-// ---- Entries (Ingreso de mercancia) ----
-app.get('/api/entries', (req, res) => {
-  res.json(db.prepare('SELECT * FROM entries ORDER BY fecha DESC, id DESC').all());
+// ---- Entries ----
+app.get('/api/entries', async (req, res) => {
+  const result = await pool.query('SELECT * FROM entries ORDER BY fecha DESC, id DESC');
+  res.json(result.rows);
 });
 
-app.post('/api/entries', (req, res) => {
+app.post('/api/entries', async (req, res) => {
   const { fecha, proveedor, factura, codigo, item, cantidad, precio_llegada, precio_venta, iva, ubicacion } = req.body;
   if (!fecha || !codigo || !item || !cantidad) return res.status(400).json({ error: 'Faltan campos requeridos' });
 
-  const insertEntry = db.prepare(`INSERT INTO entries (fecha, proveedor, factura, codigo, item, cantidad, precio_llegada, precio_venta, iva)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-
-  const existing = db.prepare('SELECT * FROM products WHERE codigo=?').get(codigo);
-
-  const tx = db.transaction(() => {
-    insertEntry.run(fecha, proveedor || '', factura || '', codigo, item, cantidad, precio_llegada, precio_venta, iva || 0);
-    if (existing) {
-      db.prepare(`UPDATE products SET stock = stock + ?, precio_compra=?, precio_venta=?, iva=?, item=?, proveedor=? WHERE codigo=?`)
-        .run(cantidad, precio_llegada, precio_venta, iva || 0, item, proveedor || '', codigo);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO entries (fecha, proveedor, factura, codigo, item, cantidad, precio_llegada, precio_venta, iva)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [fecha, proveedor || '', factura || '', codigo, item, cantidad, precio_llegada, precio_venta, iva || 0]
+    );
+    const existing = await client.query('SELECT * FROM products WHERE codigo=$1', [codigo]);
+    if (existing.rows.length > 0) {
+      await client.query(
+        `UPDATE products SET stock=stock+$1, precio_compra=$2, precio_venta=$3, iva=$4, item=$5, proveedor=$6 WHERE codigo=$7`,
+        [cantidad, precio_llegada, precio_venta, iva || 0, item, proveedor || '', codigo]
+      );
     } else {
-      db.prepare(`INSERT INTO products (codigo, item, proveedor, precio_compra, precio_venta, iva, stock, ubicacion)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(codigo, item, proveedor || '', precio_llegada, precio_venta, iva || 0, cantidad, ubicacion || 'bodega');
+      await client.query(
+        `INSERT INTO products (codigo, item, proveedor, precio_compra, precio_venta, iva, stock, ubicacion)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [codigo, item, proveedor || '', precio_llegada, precio_venta, iva || 0, cantidad, ubicacion || 'bodega']
+      );
     }
-  });
-  tx();
-  res.json({ ok: true });
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
-// ---- Sales (Salida de mercancia) ----
-app.get('/api/sales', (req, res) => {
-  res.json(db.prepare('SELECT * FROM sales ORDER BY fecha DESC, id DESC').all());
+// ---- Sales ----
+app.get('/api/sales', async (req, res) => {
+  const result = await pool.query('SELECT * FROM sales ORDER BY fecha DESC, id DESC');
+  res.json(result.rows);
 });
 
-app.post('/api/sales', (req, res) => {
+app.post('/api/sales', async (req, res) => {
   const { fecha, codigo, cantidad, precio_venta } = req.body;
   if (!fecha || !codigo || !cantidad || !precio_venta) return res.status(400).json({ error: 'Faltan campos requeridos' });
 
-  const product = db.prepare('SELECT * FROM products WHERE codigo=?').get(codigo);
-  if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
-  if (product.stock < cantidad) return res.status(400).json({ error: 'Stock insuficiente' });
+  const client = await pool.connect();
+  try {
+    const prod = await client.query('SELECT * FROM products WHERE codigo=$1', [codigo]);
+    if (!prod.rows.length) return res.status(404).json({ error: 'Producto no encontrado' });
+    const product = prod.rows[0];
+    if (product.stock < cantidad) return res.status(400).json({ error: 'Stock insuficiente' });
 
-  const precioVenta = parseFloat(precio_venta);
-  const ganancia = (precioVenta - product.precio_compra) * cantidad;
+    const precioVenta = parseFloat(precio_venta);
+    const ganancia = (precioVenta - parseFloat(product.precio_compra)) * cantidad;
 
-  const tx = db.transaction(() => {
-    db.prepare(`INSERT INTO sales (fecha, codigo, item, cantidad, precio_venta, precio_compra, ganancia)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run(fecha, codigo, product.item, cantidad, precioVenta, product.precio_compra, ganancia);
-    db.prepare('UPDATE products SET stock = stock - ? WHERE codigo=?').run(cantidad, codigo);
-  });
-  tx();
-  res.json({ ok: true, ganancia });
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO sales (fecha, codigo, item, cantidad, precio_venta, precio_compra, ganancia)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [fecha, codigo, product.item, cantidad, precioVenta, product.precio_compra, ganancia]
+    );
+    await client.query('UPDATE products SET stock=stock-$1 WHERE codigo=$2', [cantidad, codigo]);
+    await client.query('COMMIT');
+    res.json({ ok: true, ganancia });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 // ---- Dashboard ----
-app.get('/api/dashboard', (req, res) => {
-  const totalProducts = db.prepare('SELECT COUNT(*) c FROM products').get().c;
-  const totalStockValue = db.prepare('SELECT COALESCE(SUM(stock * precio_compra),0) v FROM products').get().v;
-  const totalSalesValue = db.prepare('SELECT COALESCE(SUM(stock * precio_venta),0) v FROM products').get().v;
-  const lowStock = db.prepare('SELECT * FROM products WHERE stock <= stock_minimo ORDER BY stock ASC').all();
-  const outOfStock = db.prepare('SELECT * FROM products WHERE stock <= 0').all();
+app.get('/api/dashboard', async (req, res) => {
+  const [totalProd, stockVal, salesVal, lowStock, today] = await Promise.all([
+    pool.query('SELECT COUNT(*) c FROM products'),
+    pool.query('SELECT COALESCE(SUM(stock * precio_compra),0) v FROM products'),
+    pool.query('SELECT COALESCE(SUM(stock * precio_venta),0) v FROM products'),
+    pool.query('SELECT * FROM products WHERE stock <= stock_minimo ORDER BY stock ASC'),
+    new Date().toISOString().slice(0, 10)
+  ]);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const ventasHoy = db.prepare("SELECT COALESCE(SUM(cantidad * precio_venta),0) total, COALESCE(SUM(ganancia),0) ganancia, COUNT(*) c FROM sales WHERE fecha=?").get(today);
-
-  const ventasTotales = db.prepare('SELECT COALESCE(SUM(cantidad * precio_venta),0) total, COALESCE(SUM(ganancia),0) ganancia FROM sales').get();
-
-  const topVendidos = db.prepare(`SELECT item, codigo, SUM(cantidad) total_vendido FROM sales GROUP BY codigo ORDER BY total_vendido DESC LIMIT 5`).all();
+  const [ventasHoy, ventasTotales, topVendidos] = await Promise.all([
+    pool.query(`SELECT COALESCE(SUM(cantidad*precio_venta),0) total, COALESCE(SUM(ganancia),0) ganancia, COUNT(*) c FROM sales WHERE fecha=$1`, [today]),
+    pool.query(`SELECT COALESCE(SUM(cantidad*precio_venta),0) total, COALESCE(SUM(ganancia),0) ganancia FROM sales`),
+    pool.query(`SELECT item, codigo, SUM(cantidad) total_vendido FROM sales GROUP BY codigo, item ORDER BY total_vendido DESC LIMIT 5`)
+  ]);
 
   res.json({
-    totalProducts,
-    totalStockValue,
-    totalSalesValue,
-    lowStock,
-    outOfStock,
-    ventasHoy,
-    ventasTotales,
-    topVendidos
+    totalProducts: totalProd.rows[0].c,
+    totalStockValue: stockVal.rows[0].v,
+    totalSalesValue: salesVal.rows[0].v,
+    lowStock: lowStock.rows,
+    outOfStock: lowStock.rows.filter(p => p.stock <= 0),
+    ventasHoy: ventasHoy.rows[0],
+    ventasTotales: ventasTotales.rows[0],
+    topVendidos: topVendidos.rows
   });
 });
 
-// ---- Exportar a Excel ----
-app.get('/api/export', (req, res) => {
-  const products = db.prepare('SELECT codigo, item, proveedor, precio_compra, precio_venta, iva, stock, stock_minimo, ubicacion FROM products ORDER BY item').all();
-  const entries = db.prepare('SELECT fecha, proveedor, factura, codigo, item, cantidad, precio_llegada, precio_venta, iva FROM entries ORDER BY fecha DESC, id DESC').all();
-  const sales = db.prepare('SELECT fecha, codigo, item, cantidad, precio_venta, precio_compra, ganancia FROM sales ORDER BY fecha DESC, id DESC').all();
+// ---- Export Excel ----
+app.get('/api/export', async (req, res) => {
+  const [products, entries, sales] = await Promise.all([
+    pool.query('SELECT codigo, item, proveedor, precio_compra, precio_venta, iva, stock, stock_minimo, ubicacion FROM products ORDER BY item'),
+    pool.query('SELECT fecha, proveedor, factura, codigo, item, cantidad, precio_llegada, precio_venta, iva FROM entries ORDER BY fecha DESC, id DESC'),
+    pool.query('SELECT fecha, codigo, item, cantidad, precio_venta, precio_compra, ganancia FROM sales ORDER BY fecha DESC, id DESC')
+  ]);
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(products), 'Inventario');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entries), 'Ingresos');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sales), 'Salidas');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(products.rows), 'Inventario');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(entries.rows), 'Ingresos');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sales.rows), 'Salidas');
 
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   const fecha = new Date().toISOString().slice(0, 10);
@@ -188,4 +219,6 @@ app.get('/api/export', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));
+initDB()
+  .then(() => app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`)))
+  .catch(err => { console.error('Error iniciando DB:', err); process.exit(1); });
