@@ -45,8 +45,9 @@ async function loadProductos() {
   body.innerHTML = productos.map(p => `
     <tr class="${p.stock <= 0 ? 'out-of-stock' : (p.stock <= p.stock_minimo ? 'low-stock' : '')}">
       <td>${p.codigo}</td><td>${p.item}</td><td>${p.proveedor || ''}</td>
-      <td>${money(p.precio_compra)}</td><td>${money(p.precio_venta)}</td><td>${p.iva}%</td>
-      <td>${p.stock}</td><td>${p.stock_minimo}</td>
+      <td>${money(p.precio_compra)}</td>
+      <td><input type="number" class="input-stock" value="${p.stock}" data-codigo="${p.codigo}" style="width:70px;padding:0.2rem;border:1px solid #cbd5e1;border-radius:4px;"></td>
+      <td>${p.stock_minimo}</td>
       <td><span class="badge ${p.ubicacion}">${p.ubicacion}</span></td>
       <td><button class="btn-delete" data-codigo="${p.codigo}">Eliminar</button></td>
     </tr>`).join('');
@@ -57,6 +58,18 @@ async function loadProductos() {
         await fetch(`/api/products/${btn.dataset.codigo}`, { method: 'DELETE' });
         loadProductos();
       }
+    });
+  });
+
+  body.querySelectorAll('.input-stock').forEach(input => {
+    input.addEventListener('change', async () => {
+      const codigo = input.dataset.codigo;
+      const producto = productos.find(p => p.codigo === codigo);
+      await fetch(`/api/products/${codigo}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...producto, stock: Number(input.value) })
+      });
     });
   });
 }
@@ -113,6 +126,15 @@ async function loadSalidas() {
     <td>${money(s.precio_venta)}</td><td>${money(s.ganancia)}</td></tr>`).join('');
 }
 
+// Auto-llenar item al escribir codigo en salida
+document.getElementById('salida-codigo').addEventListener('blur', async () => {
+  const codigo = document.getElementById('salida-codigo').value.trim();
+  if (!codigo) return;
+  const productos = await fetch('/api/products?q=' + encodeURIComponent(codigo)).then(r => r.json());
+  const producto = productos.find(p => p.codigo === codigo);
+  document.getElementById('salida-item').value = producto ? producto.item : '';
+});
+
 document.getElementById('form-salida').addEventListener('submit', async e => {
   e.preventDefault();
   const fd = new FormData(e.target);
@@ -143,7 +165,7 @@ async function loadBusqueda(q) {
     return `<tr class="${p.stock <= 0 ? 'out-of-stock' : ''}">
       <td>${p.codigo}</td><td>${p.item}</td><td>${p.stock}</td>
       <td><span class="badge ${p.ubicacion}">${p.ubicacion}</span></td>
-      <td>${money(p.precio_venta)}</td><td>${estado}</td></tr>`;
+      <td>${money(p.precio_compra)}</td><td>${estado}</td></tr>`;
   }).join('');
 }
 

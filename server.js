@@ -122,19 +122,20 @@ app.get('/api/sales', (req, res) => {
 });
 
 app.post('/api/sales', (req, res) => {
-  const { fecha, codigo, cantidad } = req.body;
-  if (!fecha || !codigo || !cantidad) return res.status(400).json({ error: 'Faltan campos requeridos' });
+  const { fecha, codigo, cantidad, precio_venta } = req.body;
+  if (!fecha || !codigo || !cantidad || !precio_venta) return res.status(400).json({ error: 'Faltan campos requeridos' });
 
   const product = db.prepare('SELECT * FROM products WHERE codigo=?').get(codigo);
   if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
   if (product.stock < cantidad) return res.status(400).json({ error: 'Stock insuficiente' });
 
-  const ganancia = (product.precio_venta - product.precio_compra) * cantidad;
+  const precioVenta = parseFloat(precio_venta);
+  const ganancia = (precioVenta - product.precio_compra) * cantidad;
 
   const tx = db.transaction(() => {
     db.prepare(`INSERT INTO sales (fecha, codigo, item, cantidad, precio_venta, precio_compra, ganancia)
       VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run(fecha, codigo, product.item, cantidad, product.precio_venta, product.precio_compra, ganancia);
+      .run(fecha, codigo, product.item, cantidad, precioVenta, product.precio_compra, ganancia);
     db.prepare('UPDATE products SET stock = stock - ? WHERE codigo=?').run(cantidad, codigo);
   });
   tx();
