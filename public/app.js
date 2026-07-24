@@ -39,40 +39,105 @@ async function loadDashboard() {
 }
 
 // --- Productos ---
-async function loadProductos() {
-  const productos = await fetch('/api/products').then(r => r.json());
+let todosLosProductos = [];
+
+async function loadProductos(filtro = '') {
+  todosLosProductos = await fetch('/api/products').then(r => r.json());
+  renderProductos(filtro);
+}
+
+function renderProductos(filtro = '') {
+  const q = filtro.toLowerCase();
+  const lista = q
+    ? todosLosProductos.filter(p => p.codigo.toLowerCase().includes(q) || p.item.toLowerCase().includes(q) || (p.proveedor||'').toLowerCase().includes(q))
+    : todosLosProductos;
+
   const body = document.getElementById('lista-productos');
-  body.innerHTML = productos.map(p => `
+  body.innerHTML = lista.map(p => `
     <tr class="${p.stock <= 0 ? 'out-of-stock' : (p.stock <= p.stock_minimo ? 'low-stock' : '')}">
-      <td>${p.codigo}</td><td>${p.item}</td><td>${p.proveedor || ''}</td>
-      <td>${money(p.precio_compra)}</td>
-      <td><input type="number" class="input-stock" value="${p.stock}" data-codigo="${p.codigo}" style="width:70px;padding:0.2rem;border:1px solid #cbd5e1;border-radius:4px;"></td>
+      <td>${p.codigo}</td>
+      <td>${p.item}</td>
+      <td>${p.proveedor || ''}</td>
+      <td>${p.precio_compra > 0 ? money(p.precio_compra) : '<span style="color:#f59e0b">—</span>'}</td>
+      <td>${p.precio_venta > 0 ? money(p.precio_venta) : '<span style="color:#f59e0b">—</span>'}</td>
+      <td>${p.iva > 0 ? p.iva+'%' : '<span style="color:#f59e0b">—</span>'}</td>
+      <td>${p.stock}</td>
       <td>${p.stock_minimo}</td>
       <td><span class="badge ${p.ubicacion}">${p.ubicacion}</span></td>
-      <td><button class="btn-delete" data-codigo="${p.codigo}">Eliminar</button></td>
+      <td style="white-space:nowrap;">
+        <button class="btn-edit" data-codigo="${p.codigo}" style="background:#2563eb;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.8rem;margin-right:4px;">✏️ Editar</button>
+        <button class="btn-delete" data-codigo="${p.codigo}">Eliminar</button>
+      </td>
     </tr>`).join('');
+
+  body.querySelectorAll('.btn-edit').forEach(btn => {
+    btn.addEventListener('click', () => abrirEditar(btn.dataset.codigo));
+  });
 
   body.querySelectorAll('.btn-delete').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (confirm(`¿Eliminar el producto ${btn.dataset.codigo}?`)) {
         await fetch(`/api/products/${btn.dataset.codigo}`, { method: 'DELETE' });
-        loadProductos();
+        loadProductos(document.getElementById('filtro-productos').value);
       }
     });
   });
-
-  body.querySelectorAll('.input-stock').forEach(input => {
-    input.addEventListener('change', async () => {
-      const codigo = input.dataset.codigo;
-      const producto = productos.find(p => p.codigo === codigo);
-      await fetch(`/api/products/${codigo}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...producto, stock: Number(input.value) })
-      });
-    });
-  });
 }
+
+document.getElementById('filtro-productos').addEventListener('input', e => renderProductos(e.target.value));
+
+function abrirEditar(codigo) {
+  const p = todosLosProductos.find(x => x.codigo === codigo);
+  if (!p) return;
+  const f = document.getElementById('form-editar');
+  f.codigo.value = p.codigo;
+  f.item.value = p.item;
+  f.proveedor.value = p.proveedor || '';
+  f.precio_compra.value = p.precio_compra || '';
+  f.precio_venta.value = p.precio_venta || '';
+  f.iva.value = p.iva || 0;
+  f.stock.value = p.stock;
+  f.stock_minimo.value = p.stock_minimo;
+  f.ubicacion.value = p.ubicacion || 'bodega';
+  const modal = document.getElementById('modal-editar');
+  modal.style.display = 'flex';
+}
+
+document.getElementById('btn-cerrar-modal').addEventListener('click', () => {
+  document.getElementById('modal-editar').style.display = 'none';
+});
+
+document.getElementById('modal-editar').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-editar'))
+    document.getElementById('modal-editar').style.display = 'none';
+});
+
+document.getElementById('form-editar').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  const codigo = f.codigo.value;
+  const data = {
+    item: f.item.value,
+    proveedor: f.proveedor.value,
+    precio_compra: parseFloat(f.precio_compra.value) || 0,
+    precio_venta: parseFloat(f.precio_venta.value) || 0,
+    iva: parseFloat(f.iva.value) || 0,
+    stock: parseInt(f.stock.value) || 0,
+    stock_minimo: parseInt(f.stock_minimo.value) || 5,
+    ubicacion: f.ubicacion.value
+  };
+  const res = await fetch(`/api/products/${codigo}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (res.ok) {
+    document.getElementById('modal-editar').style.display = 'none';
+    loadProductos(document.getElementById('filtro-productos').value);
+  } else {
+    alert('Error al guardar');
+  }
+});
 
 document.getElementById('form-producto').addEventListener('submit', async e => {
   e.preventDefault();

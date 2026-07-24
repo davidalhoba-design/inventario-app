@@ -79,12 +79,42 @@
 
     <div class="panel">
       <h2>📋 Listado de Productos</h2>
+      <input type="text" id="filtro-productos" placeholder="Filtrar por código o nombre..." style="width:100%;padding:0.5rem;margin-bottom:0.75rem;border:1px solid #cbd5e1;border-radius:6px;font-size:0.9rem;">
+      <div style="overflow-x:auto;">
       <table>
-        <thead><tr><th>Código</th><th>Item</th><th>Proveedor</th><th>P. Llegada</th><th>Stock</th><th>Mín.</th><th>Ubicación</th><th></th></tr></thead>
+        <thead><tr><th>Código</th><th>Descripción</th><th>Referencia</th><th>P. Llegada</th><th>P. Venta</th><th>IVA%</th><th>Stock</th><th>Mín.</th><th>Ubicación</th><th></th></tr></thead>
         <tbody id="lista-productos"></tbody>
       </table>
+      </div>
     </div>
   </section>
+
+  <!-- MODAL EDITAR PRODUCTO -->
+  <div id="modal-editar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:1.5rem;width:90%;max-width:600px;max-height:90vh;overflow-y:auto;">
+      <h2 style="margin-top:0;">✏️ Editar Producto</h2>
+      <form id="form-editar" class="form-grid">
+        <label>Código <input type="text" name="codigo" readonly style="background:#f1f5f9;"></label>
+        <label>Descripción <input type="text" name="item" required></label>
+        <label>Referencia <input type="text" name="proveedor"></label>
+        <label>Precio de llegada <input type="number" step="0.01" name="precio_compra"></label>
+        <label>Precio de venta <input type="number" step="0.01" name="precio_venta"></label>
+        <label>IVA (%) <input type="number" step="0.01" name="iva" value="0"></label>
+        <label>Stock <input type="number" name="stock"></label>
+        <label>Stock mínimo <input type="number" name="stock_minimo"></label>
+        <label>Ubicación
+          <select name="ubicacion">
+            <option value="bodega">Bodega</option>
+            <option value="exhibicion">Exhibición</option>
+          </select>
+        </label>
+        <div style="grid-column:1/-1;display:flex;gap:0.5rem;">
+          <button type="submit" style="flex:1;">Guardar Cambios</button>
+          <button type="button" id="btn-cerrar-modal" style="flex:1;background:#64748b;">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- INGRESO -->
   <section id="ingreso" class="tab-content">
