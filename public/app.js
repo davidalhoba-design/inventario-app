@@ -46,35 +46,54 @@ async function loadProductos(filtro = '') {
   renderProductos(filtro);
 }
 
+function val(v, fmt) { return (v && Number(v) > 0) ? fmt(v) : '<span class="pc-pendiente">Sin completar</span>'; }
+
 function renderProductos(filtro = '') {
   const q = filtro.toLowerCase();
   const lista = q
     ? todosLosProductos.filter(p => p.codigo.toLowerCase().includes(q) || p.item.toLowerCase().includes(q) || (p.proveedor||'').toLowerCase().includes(q))
     : todosLosProductos;
 
+  // --- Tabla desktop ---
   const body = document.getElementById('lista-productos');
   body.innerHTML = lista.map(p => `
     <tr class="${p.stock <= 0 ? 'out-of-stock' : (p.stock <= p.stock_minimo ? 'low-stock' : '')}">
       <td>${p.codigo}</td>
       <td>${p.item}</td>
       <td>${p.proveedor || ''}</td>
-      <td>${p.precio_compra > 0 ? money(p.precio_compra) : '<span style="color:#f59e0b">—</span>'}</td>
-      <td>${p.precio_venta > 0 ? money(p.precio_venta) : '<span style="color:#f59e0b">—</span>'}</td>
-      <td>${p.iva > 0 ? p.iva+'%' : '<span style="color:#f59e0b">—</span>'}</td>
-      <td>${p.stock}</td>
-      <td>${p.stock_minimo}</td>
+      <td>${val(p.precio_compra, money)}</td>
+      <td>${val(p.precio_venta, money)}</td>
+      <td>${Number(p.iva) > 0 ? p.iva+'%' : '<span class="pc-pendiente">—</span>'}</td>
+      <td>${p.stock}</td><td>${p.stock_minimo}</td>
       <td><span class="badge ${p.ubicacion}">${p.ubicacion}</span></td>
       <td style="white-space:nowrap;">
-        <button class="btn-edit" data-codigo="${p.codigo}" style="background:#2563eb;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.8rem;margin-right:4px;">✏️ Editar</button>
-        <button class="btn-delete" data-codigo="${p.codigo}">Eliminar</button>
+        <button class="btn-edit" data-codigo="${p.codigo}" style="background:#2563eb;color:#fff;border:none;padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-size:0.8rem;margin-right:4px;">✏️</button>
+        <button class="btn-delete" data-codigo="${p.codigo}">🗑️</button>
       </td>
     </tr>`).join('');
 
-  body.querySelectorAll('.btn-edit').forEach(btn => {
+  // --- Tarjetas móvil ---
+  const cards = document.getElementById('lista-productos-cards');
+  cards.innerHTML = lista.map(p => `
+    <div class="producto-card ${p.stock <= 0 ? 'out-of-stock' : (p.stock <= p.stock_minimo ? 'low-stock' : '')}">
+      <div class="pc-titulo">${p.item}</div>
+      <div class="pc-codigo">Cód: ${p.codigo} &nbsp;|&nbsp; Ref: ${p.proveedor || '—'}</div>
+      <div class="pc-fila"><span>P. Llegada</span><span>${val(p.precio_compra, money)}</span></div>
+      <div class="pc-fila"><span>P. Venta</span><span>${val(p.precio_venta, money)}</span></div>
+      <div class="pc-fila"><span>IVA</span><span>${Number(p.iva) > 0 ? p.iva+'%' : '<span class="pc-pendiente">—</span>'}</span></div>
+      <div class="pc-fila"><span>Stock</span><span>${p.stock}</span></div>
+      <div class="pc-fila"><span>Ubicación</span><span><span class="badge ${p.ubicacion}">${p.ubicacion}</span></span></div>
+      <div class="pc-acciones">
+        <button class="btn-edit" data-codigo="${p.codigo}" style="background:#2563eb;color:#fff;">✏️ Editar</button>
+        <button class="btn-delete" data-codigo="${p.codigo}" style="background:#ef4444;color:#fff;">🗑️ Eliminar</button>
+      </div>
+    </div>`).join('');
+
+  // Eventos compartidos para tabla y tarjetas
+  document.querySelectorAll('.btn-edit').forEach(btn => {
     btn.addEventListener('click', () => abrirEditar(btn.dataset.codigo));
   });
-
-  body.querySelectorAll('.btn-delete').forEach(btn => {
+  document.querySelectorAll('.btn-delete').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (confirm(`¿Eliminar el producto ${btn.dataset.codigo}?`)) {
         await fetch(`/api/products/${btn.dataset.codigo}`, { method: 'DELETE' });

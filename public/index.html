@@ -80,12 +80,15 @@
     <div class="panel">
       <h2>📋 Listado de Productos</h2>
       <input type="text" id="filtro-productos" placeholder="Filtrar por código o nombre..." style="width:100%;padding:0.5rem;margin-bottom:0.75rem;border:1px solid #cbd5e1;border-radius:6px;font-size:0.9rem;">
-      <div style="overflow-x:auto;">
-      <table>
-        <thead><tr><th>Código</th><th>Descripción</th><th>Referencia</th><th>P. Llegada</th><th>P. Venta</th><th>IVA%</th><th>Stock</th><th>Mín.</th><th>Ubicación</th><th></th></tr></thead>
-        <tbody id="lista-productos"></tbody>
-      </table>
+      <!-- Tabla desktop -->
+      <div class="tabla-scroll tabla-productos-desktop">
+        <table>
+          <thead><tr><th>Código</th><th>Descripción</th><th>Referencia</th><th>P. Llegada</th><th>P. Venta</th><th>IVA%</th><th>Stock</th><th>Mín.</th><th>Ubicación</th><th></th></tr></thead>
+          <tbody id="lista-productos"></tbody>
+        </table>
       </div>
+      <!-- Tarjetas móvil -->
+      <div class="tabla-productos-movil" id="lista-productos-cards"></div>
     </div>
   </section>
 
