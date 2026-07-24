@@ -99,7 +99,7 @@ app.get('/api/entries', async (req, res) => {
 });
 
 app.post('/api/entries', async (req, res) => {
-  const { fecha, proveedor, factura, codigo, item, cantidad, precio_llegada, precio_venta, iva, ubicacion } = req.body;
+  const { fecha, proveedor, factura, codigo, item, cantidad, precio_llegada, iva, ubicacion } = req.body;
   if (!fecha || !codigo || !item || !cantidad) return res.status(400).json({ error: 'Faltan campos requeridos' });
 
   const client = await pool.connect();
@@ -108,19 +108,19 @@ app.post('/api/entries', async (req, res) => {
     await client.query(
       `INSERT INTO entries (fecha, proveedor, factura, codigo, item, cantidad, precio_llegada, precio_venta, iva)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [fecha, proveedor || '', factura || '', codigo, item, cantidad, precio_llegada, precio_venta, iva || 0]
+      [fecha, proveedor || '', factura || '', codigo, item, cantidad, precio_llegada || 0, 0, iva || 0]
     );
     const existing = await client.query('SELECT * FROM products WHERE codigo=$1', [codigo]);
     if (existing.rows.length > 0) {
       await client.query(
-        `UPDATE products SET stock=stock+$1, precio_compra=$2, precio_venta=$3, iva=$4, item=$5, proveedor=$6 WHERE codigo=$7`,
-        [cantidad, precio_llegada, precio_venta, iva || 0, item, proveedor || '', codigo]
+        `UPDATE products SET stock=stock+$1, precio_compra=$2, iva=$3, item=$4, proveedor=$5 WHERE codigo=$6`,
+        [cantidad, precio_llegada || 0, iva || 0, item, proveedor || '', codigo]
       );
     } else {
       await client.query(
         `INSERT INTO products (codigo, item, proveedor, precio_compra, precio_venta, iva, stock, ubicacion)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [codigo, item, proveedor || '', precio_llegada, precio_venta, iva || 0, cantidad, ubicacion || 'bodega']
+        [codigo, item, proveedor || '', precio_llegada || 0, 0, iva || 0, cantidad, ubicacion || 'bodega']
       );
     }
     await client.query('COMMIT');
